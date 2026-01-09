@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔐 Secure File Sharing System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <i class="fas fa-shield-alt fa-3x"></i>
+                <div class="logo-text">
+                    <h1>Secure File Sharing</h1>
+                    <p class="subtitle">AES-256 Encryption • Secure Transfer • Key Management</p>
+                </div>
+            </div>
+            <div class="stats">
+                <div class="stat">
+                    <i class="fas fa-file-alt"></i>
+                    <span>{{ files|length }} Files</span>
+                </div>
+                <div class="stat">
+                    <i class="fas fa-lock"></i>
+                    <span>AES-256</span>
+                </div>
+                <div class="stat">
+                    <i class="fas fa-key"></i>
+                    <span>Per-File Keys</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="messages">
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            <i class="fas fa-{% if category == 'success' %}check-circle{% elif category == 'error' %}exclamation-circle{% else %}info-circle{% endif %}"></i>
+                            <span>{{ message }}</span>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <!-- Upload Section -->
+        <section class="card upload-section">
+            <h2><i class="fas fa-cloud-upload-alt"></i> Upload & Encrypt File</h2>
+            <p class="section-description">Select a file to upload. It will be automatically encrypted with AES-256 before storage.</p>
+            
+            <form action="{{ url_for('upload_file') }}" method="POST" enctype="multipart/form-data" class="upload-form">
+                <div class="file-input-container">
+                    <input type="file" name="file" id="fileInput" required>
+                    <label for="fileInput" class="file-label">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                        <span id="fileName">Choose a file to encrypt...</span>
+                    </label>
+                </div>
+                
+                <div class="file-info" id="fileInfo" style="display: none;">
+                    <div class="file-info-content">
+                        <p><strong>Selected file:</strong> <span id="selectedFileName"></span></p>
+                        <p><strong>Size:</strong> <span id="fileSize"></span></p>
+                        <p><strong>Type:</strong> <span id="fileType"></span></p>
+                    </div>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-shield-alt"></i> Encrypt & Upload
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('fileInput').value=''; resetFileInfo();">
+                        <i class="fas fa-times"></i> Clear
+                    </button>
+                </div>
+                
+                <div class="form-note">
+                    <i class="fas fa-info-circle"></i> 
+                    <span>Allowed file types: .txt, .pdf, .png, .jpg, .doc, .zip, .csv, .py (Max: 100MB)</span>
+                </div>
+            </form>
+        </section>
+
+        <!-- Files Section -->
+        <section class="card files-section">
+            <div class="section-header">
+                <h2><i class="fas fa-folder-open"></i> Available Files</h2>
+                <span class="badge">{{ files|length }} encrypted files</span>
+            </div>
+            
+            {% if files %}
+                <div class="file-list-container">
+                    <div class="table-responsive">
+                        <table class="file-table">
+                            <thead>
+                                <tr>
+                                    <th>File Name</th>
+                                    <th>Size</th>
+                                    <th>File ID</th>
+                                    <th>Download Options</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for file in files %}
+                                <tr>
+                                    <td class="file-name">
+                                        <i class="fas fa-file"></i>
+                                        <span title="{{ file.name }}">{{ file.name|truncate(30) }}</span>
+                                    </td>
+                                    <td class="file-size">
+                                        {% if file.size < 1024 %}
+                                            {{ file.size }} B
+                                        {% elif file.size < 1048576 %}
+                                            {{ (file.size / 1024)|round(1) }} KB
+                                        {% else %}
+                                            {{ (file.size / 1048576)|round(2) }} MB
+                                        {% endif %}
+                                    </td>
+                                    <td class="file-id">
+                                        <code onclick="copyToClipboard('{{ file.id }}')" title="Click to copy">
+                                            {{ file.id[:8] }}...
+                                        </code>
+                                        <span class="copy-hint">(click to copy)</span>
+                                    </td>
+                                    <td class="download-options">
+                                        <div class="option-group">
+                                            <a href="{{ url_for('download_file', file_id=file.id) }}" 
+                                               class="btn btn-success btn-sm option-btn"
+                                               title="Automatic decryption">
+                                                <i class="fas fa-download"></i> Auto
+                                            </a>
+                                            <span class="option-label">Auto-decrypt</span>
+                                        </div>
+                                        <div class="option-group">
+                                            <a href="{{ url_for('download_encrypted', file_id=file.id) }}" 
+                                               class="btn btn-warning btn-sm option-btn"
+                                               title="Encrypted file only">
+                                                <i class="fas fa-file-lock"></i> .enc
+                                            </a>
+                                            <a href="{{ url_for('download_key', file_id=file.id) }}" 
+                                               class="btn btn-info btn-sm option-btn"
+                                               title="Encryption key">
+                                                <i class="fas fa-key"></i> Key
+                                            </a>
+                                            <span class="option-label">Secure mode</span>
+                                        </div>
+                                    </td>
+                                    <td class="file-actions">
+                                        <form action="{{ url_for('delete_file', file_id=file.id) }}" 
+                                              method="POST" 
+                                              class="delete-form"
+                                              onsubmit="return confirm('Are you sure you want to delete this file and its encryption key?');">
+                                            <button type="submit" class="btn btn-danger btn-sm" title="Delete file and key">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            {% else %}
+                <div class="empty-state">
+                    <div class="empty-icon">
+                        <i class="fas fa-folder-open fa-4x"></i>
+                    </div>
+                    <h3>No encrypted files yet</h3>
+                    <p>Upload a file to see it here. All files are encrypted with AES-256 before storage.</p>
+                </div>
+            {% endif %}
+        </section>
+
+        <!-- Information Section -->
+        <section class="card info-section">
+            <h2><i class="fas fa-info-circle"></i> How It Works & Security</h2>
+            
+            <div class="security-features">
+                <div class="feature">
+                    <div class="feature-icon">
+                        <i class="fas fa-lock"></i>
+                    </div>
+                    <div class="feature-content">
+                        <h3>Encryption at Rest</h3>
+                        <p>All files are encrypted with <strong>AES-256-GCM</strong> before storage. Only encrypted (.enc) files are stored on the server.</p>
+                    </div>
+                </div>
+                
+                <div class="feature">
+                    <div class="feature-icon">
+                        <i class="fas fa-key"></i>
+                    </div>
+                    <div class="feature-content">
+                        <h3>Key Management</h3>
+                        <p>Each file gets a unique encryption key, stored separately. Keys are never sent with files unless requested.</p>
+                    </div>
+                </div>
+                
+                <div class="feature">
+                    <div class="feature-icon">
+                        <i class="fas fa-download"></i>
+                    </div>
+                    <div class="feature-content">
+                        <h3>Three Download Options</h3>
+                        <ul>
+                            <li><strong>Auto-decrypt:</strong> Server decrypts automatically (convenient)</li>
+                            <li><strong>.enc + Key:</strong> Download encrypted file + key separately (most secure)</li>
+                            <li><strong>Local decryption:</strong> Use the provided Python tool for offline decryption</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="steps">
+                <h3>Quick Start Guide:</h3>
+                <div class="step-cards">
+                    <div class="step-card">
+                        <div class="step-number">1</div>
+                        <h4>Upload</h4>
+                        <p>Select any file up to 100MB. It will be automatically encrypted.</p>
+                    </div>
+                    <div class="step-card">
+                        <div class="step-number">2</div>
+                        <h4>Store Securely</h4>
+                        <p>Encrypted file (.enc) is stored with separate key file.</p>
+                    </div>
+                    <div class="step-card">
+                        <div class="step-number">3</div>
+                        <h4>Download</h4>
+                        <p>Choose your preferred download method based on security needs.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h4><i class="fas fa-shield-alt"></i> Secure File Sharing</h4>
+                    <p>Cyber Security Internship Project<br>AES-256 Encryption System</p>
+                </div>
+                
+                <div class="footer-section">
+                    <h4>Technologies</h4>
+                    <div class="tech-icons">
+                        <span class="tech-icon"><i class="fab fa-python"></i> Flask</span>
+                        <span class="tech-icon"><i class="fas fa-key"></i> AES-256</span>
+                        <span class="tech-icon"><i class="fab fa-github"></i> GitHub</span>
+                        <span class="tech-icon"><i class="fas fa-lock"></i> GCM Mode</span>
+                    </div>
+                </div>
+                
+                <div class="footer-section">
+                    <h4>Security Features</h4>
+                    <ul class="security-list">
+                        <li>End-to-end encryption</li>
+                        <li>Per-file unique keys</li>
+                        <li>Secure key storage</li>
+                        <li>Multiple download options</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="footer-bottom">
+                <p>© 2024 Secure File Sharing System | Cyber Security Project | 
+                   <a href="#" onclick="showSystemInfo()">System Info</a> | 
+                   <a href="#" onclick="showDecryptionGuide()">Decryption Guide</a>
+                </p>
+            </div>
+        </footer>
+    </div>
+
+    <!-- System Info Modal -->
+    <div id="systemModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <h3><i class="fas fa-server"></i> System Information</h3>
+            <div id="systemInfo">Loading...</div>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script>
+        // Additional JavaScript for modals
+        function showSystemInfo() {
+            fetch('/api/info')
+                .then(response => response.json())
+                .then(data => {
+                    let infoHtml = `
+                        <div class="system-stats">
+                            <p><strong>Files encrypted:</strong> ${data.files_count}</p>
+                            <p><strong>Keys stored:</strong> ${data.keys_count}</p>
+                            <p><strong>Encryption:</strong> ${data.encryption}</p>
+                            <p><strong>Python:</strong> ${data.python_version}</p>
+                            <p><strong>Flask:</strong> ${data.flask_version}</p>
+                        </div>
+                    `;
+                    document.getElementById('systemInfo').innerHTML = infoHtml;
+                    document.getElementById('systemModal').style.display = 'block';
+                });
+        }
+        
+        function showDecryptionGuide() {
+            let guideHtml = `
+                <h4>Offline Decryption Guide</h4>
+                <p>For maximum security, download the .enc file and key separately, then decrypt locally:</p>
+                <pre><code># 1. Download decrypt.py from the repository
+# 2. Download your .enc file and key file
+# 3. Run: python decrypt.py file.enc key.key</code></pre>
+                <p>The decrypted file will be saved with original name.</p>
+            `;
+            document.getElementById('systemInfo').innerHTML = guideHtml;
+            document.getElementById('systemModal').style.display = 'block';
+        }
+        
+        function closeModal() {
+            document.getElementById('systemModal').style.display = 'none';
+        }
+        
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            var modal = document.getElementById('systemModal');
+            if (event.target == modal) {
+                modal.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>
